@@ -29,7 +29,7 @@ jobs:
 
       - name: Install Trivy v0.59.1 (pinned - safe version pre-TeamPCP attack)
         run: |
-          wget -qO- https://github.com/aquasecurity/trivy/releases/download/v0.59.1/trivy_0.59.1_Linux-64bit.tar.gz | \
+          curl -sL https://github.com/aquasecurity/trivy/releases/download/v0.59.1/trivy_0.59.1_Linux-64bit.tar.gz | \
           tar -xz -C /usr/local/bin trivy
           trivy --version
 
