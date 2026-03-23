@@ -16,4 +16,11 @@ spec:
         - name: HTTP_PROXY
           value: http://10.128.0.2:8888
         - name: NO_PROXY
-          value: 192.168.241.0/24,harbor.okd.lab,.cluster.local,kubernetes.default.svc
+          value: 192.168.241.0/24,harbor.okd.lab,.cluster.local,kubernetes.default.svc,10.0.0.0/8
+      hostAliases:
+        - ip: "192.168.241.20"
+          hostnames:
+            - "harbor.okd.lab"
+      dockerDaemonConfig:
+        insecure-registries:
+          - "harbor.okd.lab"
