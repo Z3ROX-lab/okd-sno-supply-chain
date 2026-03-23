@@ -53,6 +53,13 @@ jobs:
           chmod +x $HOME/bin/cosign
           cosign version
 
+      - name: Setup Harbor CA for Cosign
+        run: |
+          echo "${{ secrets.HARBOR_CA }}" > $HOME/harbor-ca.crt
+          # Ajouter au store système
+          sudo cp $HOME/harbor-ca.crt /usr/local/share/ca-certificates/harbor-ca.crt
+          sudo update-ca-certificates
+
       - name: Cosign sign
         env:
           COSIGN_EXPERIMENTAL: "1"
