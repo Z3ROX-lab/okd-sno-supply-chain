@@ -21,7 +21,11 @@ spec:
         - ip: "192.168.241.20"
           hostnames:
             - "harbor.okd.lab"
-      dockerDaemonConfig: |
-        {
-          "insecure-registries": ["harbor.okd.lab"]
-        }
+      dockerVolumeMounts:
+        - name: docker-daemon-config
+          mountPath: /etc/docker/daemon.json
+          subPath: daemon.json
+      volumes:
+        - name: docker-daemon-config
+          configMap:
+            name: docker-daemon-config
