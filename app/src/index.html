@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>OKD SNO Supply Chain Security</title>
+  <style>
+    body { font-family: monospace; background: #0d1117; color: #58a6ff; padding: 40px; }
+    h1 { color: #f0f6fc; }
+    .badge { display: inline-block; background: #238636; color: white; padding: 4px 12px; border-radius: 4px; margin: 4px; }
+    .pipeline { background: #161b22; border: 1px solid #30363d; padding: 20px; border-radius: 8px; margin: 20px 0; }
+    pre { color: #7ee787; }
+  </style>
+</head>
+<body>
+  <h1>🔐 OKD SNO Supply Chain Security</h1>
+  <p>Deployed via secure GitOps pipeline</p>
+
+  <div>
+    <span class="badge">✅ Trivy Scanned</span>
+    <span class="badge">✅ Cosign Signed</span>
+    <span class="badge">✅ ArgoCD Deployed</span>
+    <span class="badge">✅ Kyverno Verified</span>
+  </div>
+
+  <div class="pipeline">
+    <pre>
+GitHub Push
+    │
+    ▼
+GitHub Actions Runner (OKD pod)
+    │
+    ├── docker build
+    ├── trivy scan    → CRITICAL=0 ✅
+    ├── cosign sign   → Sigstore ✅
+    ├── harbor push   → harbor.okd.lab ✅
+    └── argocd sync   → deployed ✅
+    </pre>
+  </div>
+
+  <p>Stack: OKD 4.15 · Harbor · Trivy · Cosign · ArgoCD · Kyverno</p>
+</body>
+</html>

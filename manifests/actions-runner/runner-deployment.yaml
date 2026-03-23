@@ -1,0 +1,19 @@
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: okd-sno-runner
+  namespace: actions-runner-system
+spec:
+  replicas: 1
+  template:
+    spec:
+      repository: Z3ROX-lab/okd-sno-supply-chain
+      labels:
+        - okd-sno
+      env:
+        - name: HTTPS_PROXY
+          value: http://10.128.0.2:8888
+        - name: HTTP_PROXY
+          value: http://10.128.0.2:8888
+        - name: NO_PROXY
+          value: 192.168.241.0/24,harbor.okd.lab,.cluster.local,kubernetes.default.svc
