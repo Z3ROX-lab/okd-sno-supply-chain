@@ -2,6 +2,9 @@ authSecret:
   create: false
   name: controller-manager
 
+rbac:
+  create: false
+
 image:
   repository: summerwind/actions-runner-controller
   tag: latest
@@ -15,5 +18,4 @@ resources:
     memory: 512Mi
 
 certManagerEnabled: false
-
 webhookPort: 9443
