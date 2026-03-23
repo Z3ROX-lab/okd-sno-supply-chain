@@ -3,8 +3,6 @@ name: Supply Chain Security Pipeline
 on:
   push:
     branches: [master]
-    paths:
-      - 'app/**'
   workflow_dispatch:
 
 env:
@@ -23,12 +21,10 @@ jobs:
       - name: Set image tag
         run: echo "IMAGE_TAG=${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.IMAGE_NAME }}:${{ github.sha }}" >> $GITHUB_ENV
 
-      - name: Configure Docker insecure registry
+      - name: Check Docker config
         run: |
-          echo '{"insecure-registries":["harbor.okd.lab"]}' | sudo tee /etc/docker/daemon.json
-          sudo kill -HUP $(pgrep dockerd) || true
-          sleep 5
           docker info | grep -A5 "Insecure"
+          cat /etc/hosts | grep harbor
 
       - name: Docker login Harbor
         run: echo "${{ secrets.HARBOR_PASSWORD }}" | docker login ${{ env.HARBOR_REGISTRY }} -u ${{ secrets.HARBOR_USERNAME }} --password-stdin
