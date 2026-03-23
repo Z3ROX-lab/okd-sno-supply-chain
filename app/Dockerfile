@@ -1,5 +1,5 @@
-FROM harbor.okd.lab/library/nginx:alpine
+FROM harbor.okd.lab/library/caddy:alpine
 LABEL org.opencontainers.image.source="https://github.com/Z3ROX-lab/okd-sno-supply-chain"
 LABEL org.opencontainers.image.description="Supply Chain Security Demo App"
-COPY src/ /usr/share/nginx/html/
+COPY src/ /srv/
 EXPOSE 80
