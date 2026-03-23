@@ -21,6 +21,7 @@ spec:
         - ip: "192.168.241.20"
           hostnames:
             - "harbor.okd.lab"
-      dockerDaemonConfig:
-        insecure-registries:
-          - "harbor.okd.lab"
+      dockerDaemonConfig: |
+        {
+          "insecure-registries": ["harbor.okd.lab"]
+        }
