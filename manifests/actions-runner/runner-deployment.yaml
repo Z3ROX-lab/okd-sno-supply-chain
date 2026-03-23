@@ -25,7 +25,13 @@ spec:
         - name: docker-daemon-config
           mountPath: /etc/docker/daemon.json
           subPath: daemon.json
+        - name: combined-ca
+          mountPath: /etc/ssl/certs/ca-certificates.crt
+          subPath: ca-certificates.crt
       volumes:
         - name: docker-daemon-config
           configMap:
             name: docker-daemon-config
+        - name: combined-ca
+          configMap:
+            name: combined-ca
