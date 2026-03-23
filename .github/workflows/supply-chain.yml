@@ -29,9 +29,11 @@ jobs:
 
       - name: Install Trivy v0.69.3 (pinned - last safe version pre-TeamPCP)
         run: |
+          mkdir -p $HOME/bin
           curl -sL https://github.com/aquasecurity/trivy/releases/download/v0.69.3/trivy_0.69.3_Linux-64bit.tar.gz | \
-          tar -xz -C /usr/local/bin trivy
-          trivy --version
+          tar -xz -C $HOME/bin trivy
+          echo "$HOME/bin" >> $GITHUB_PATH
+          $HOME/bin/trivy --version
 
       - name: Trivy scan
         run: |
@@ -47,8 +49,8 @@ jobs:
       - name: Install Cosign v2.4.1 (pinned)
         run: |
           curl -sSfL https://github.com/sigstore/cosign/releases/download/v2.4.1/cosign-linux-amd64 \
-            -o /usr/local/bin/cosign
-          chmod +x /usr/local/bin/cosign
+            -o $HOME/bin/cosign
+          chmod +x $HOME/bin/cosign
           cosign version
 
       - name: Cosign sign
