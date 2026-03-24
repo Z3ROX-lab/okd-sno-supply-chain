@@ -15,42 +15,43 @@
 ## 📐 Architecture Overview
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        GitHub.com                                │
-│   Z3ROX-lab/okd-sno-supply-chain                                │
-│              │  push / PR                                        │
-│              ▼                                                   │
-│   .github/workflows/supply-chain.yml                            │
-└──────────────┬──────────────────────────────────────────────────┘
-               │  trigger
+┌─────────────────────────────────────────────────────────────────────┐
+│                        GitHub.com (SaaS)                            │
+│   Z3ROX-lab/okd-sno-supply-chain                                   │
+│              │  git push                                            │
+│              ▼                                                      │
+│   .github/workflows/supply-chain.yml                               │
+└──────────────┬──────────────────────────────────────────────────────┘
+               │  job dispatch
                ▼
-┌─────────────────────────────────────────────────────────────────┐
-│              OKD SNO 4.15 (192.168.241.10)                      │
-│                                                                  │
-│  ┌─────────────────┐     ┌──────────────────────────────────┐  │
-│  │  GitHub Actions │     │           ArgoCD                 │  │
-│  │  Self-hosted    │────▶│  root-app (App of Apps)          │  │
-│  │  Runner (pod)   │     │  ├── keycloak    ✅               │  │
-│  └────────┬────────┘     │  ├── vault       ✅               │  │
-│           │              │  ├── grafana     ✅               │  │
-│      Pipeline:           │  ├── loki        ✅               │  │
-│      1. docker build     │  ├── eso         ✅               │  │
-│      2. trivy scan       │  ├── kyverno     ✅               │  │
-│      3. cosign sign      │  └── app-demo    🚀               │  │
-│      4. harbor push      └──────────────────────────────────┘  │
-│           │                                                      │
-└───────────┼──────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│              OKD SNO 4.15 (192.168.241.10)                         │
+│                                                                     │
+│  ┌──────────────────────┐     ┌──────────────────────────────────┐ │
+│  │  GitHub Actions      │     │           ArgoCD                 │ │
+│  │  Self-hosted Runner  │     │  root-app (App of Apps)          │ │
+│  │  (pod ARC)           │     │  ├── keycloak    ✅              │ │
+│  └────────┬─────────────┘     │  ├── vault       ✅              │ │
+│           │                   │  ├── grafana     ✅              │ │
+│      Pipeline:                │  ├── loki        ✅              │ │
+│      1. docker build          │  ├── eso         ✅              │ │
+│      2. trivy scan ──gate──▶  │  ├── kyverno     ✅              │ │
+│         CRITICAL=0 ?          │  └── app-demo    🚀              │ │
+│      3. cosign sign           └──────────────────────────────────┘ │
+│      4. harbor push                                                 │
+│      5. argocd sync                                                 │
+└───────────┬─────────────────────────────────────────────────────────┘
             │ push signed image
             ▼
-┌─────────────────────────────────────────────────────────────────┐
-│              Harbor Registry (192.168.241.20)                   │
-│              harbor.okd.lab                                      │
-│                                                                  │
-│  Projects:                                                       │
-│  ├── library/         ← images mirrorées (charts, base images)  │
-│  ├── supply-chain/    ← images buildées + signées Cosign        │
-│  └── signed/          ← images validées par Kyverno             │
-└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│              Harbor Registry (192.168.241.20)                      │
+│              harbor.okd.lab                                         │
+│                                                                     │
+│  Projects:                                                          │
+│  ├── library/         ← images mirrorées (nginx, httpd, caddy...)  │
+│  └── supply-chain/    ← images buildées + signées Cosign           │
+│      └── app-demo:<sha>                                            │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -58,35 +59,45 @@
 ## 🛡️ Security Pipeline
 
 ```
-Code Push
-    │
-    ▼
-┌─────────────┐    ┌──────────────┐    ┌──────────────┐
-│ docker build │───▶│ trivy scan   │───▶│ cosign sign  │
-│             │    │ CVE check    │    │ keyless sig  │
-│ Dockerfile  │    │ CRITICAL=0   │    │ Sigstore     │
-└─────────────┘    └──────────────┘    └──────┬───────┘
-                                              │
-                                              ▼
-                                    ┌──────────────────┐
-                                    │  harbor push     │
-                                    │  harbor.okd.lab  │
-                                    │  /supply-chain   │
-                                    └────────┬─────────┘
-                                             │
-                                             ▼
-                                    ┌──────────────────┐
-                                    │  ArgoCD sync     │
-                                    │  app-demo        │
-                                    │  auto-deploy     │
-                                    └────────┬─────────┘
-                                             │
-                                             ▼
-                                    ┌──────────────────┐
-                                    │  Kyverno policy  │
-                                    │  verify-image-   │
-                                    │  signature ✅    │
-                                    └──────────────────┘
+Code Push (git push master)
+         │
+         ▼
+┌─────────────────┐
+│  docker build   │  ← FROM harbor.okd.lab/library/httpd:alpine
+│  (runner pod)   │    + apk upgrade libexpat (fix CVE-2026-32767)
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  trivy scan     │  ← v0.69.3 pinné (pré-attaque TeamPCP)
+│  CRITICAL gate  │
+└────────┬────────┘
+         │
+    ┌────┴────┐
+    │  CVE ?  │
+    └────┬────┘
+    CRITICAL │ NON → continue
+    → FAIL   ▼
+    pipeline ┌─────────────────┐
+             │  docker push    │  → harbor.okd.lab/supply-chain/app-demo
+             └────────┬────────┘
+                      │
+                      ▼
+             ┌─────────────────┐
+             │  cosign sign    │  ← keyless Sigstore
+             │  (ephemeral key)│
+             └────────┬────────┘
+                      │
+                      ▼
+             ┌─────────────────┐
+             │  argocd sync    │  → déploie app-demo dans OKD
+             └────────┬────────┘
+                      │
+                      ▼
+             ┌─────────────────┐
+             │  Kyverno verify │  ← vérifie signature Cosign
+             │  image policy   │
+             └─────────────────┘
 ```
 
 ---
@@ -97,15 +108,16 @@ Code Push
 |-----------|---------|------|
 | **OKD SNO** | 4.15 | Single Node OpenShift — cluster de démo |
 | **GitHub Actions** | - | CI/CD orchestrator (SaaS) |
-| **Self-hosted Runner** | latest | Runner pod dans OKD |
-| **Harbor** | 2.x | Registry OCI privée + scan Trivy intégré |
-| **Trivy** | latest | Scan CVE des images (CRITICAL gate) |
-| **Cosign** | 2.x | Signature keyless via Sigstore |
+| **ARC** | 0.23.7 | Actions Runner Controller — gère le runner pod |
+| **Self-hosted Runner** | summerwind | Runner pod dans OKD (2 containers) |
+| **Harbor** | 2.x | Registry OCI privée |
+| **Trivy** | 0.69.3 | Scan CVE (pinné — pré-attaque TeamPCP) |
+| **Cosign** | 2.4.1 | Signature keyless via Sigstore |
 | **ArgoCD** | Community 0.17.0 | GitOps — déploiement continu |
 | **Kyverno** | 1.12.0 | Policy-as-Code — vérification signature |
 | **HashiCorp Vault** | 0.28.0 | Secrets management |
 | **Keycloak** | 24.x | IAM / OIDC SSO |
-| **Loki + Grafana** | latest | Observabilité stack |
+| **Loki + Grafana** | latest | Observabilité |
 
 ---
 
@@ -116,30 +128,26 @@ okd-sno-supply-chain/
 ├── .github/
 │   └── workflows/
 │       └── supply-chain.yml       # Pipeline principal
+├── app/
+│   ├── Dockerfile                 # httpd:alpine + libexpat fix
+│   └── src/
+│       └── index.html             # Page de démo supply chain
 ├── argocd/
 │   └── applications/
-│       ├── gitlab-runner.yaml     # (remplacé par actions-runner)
-│       ├── actions-runner.yaml    # Self-hosted runner deployment
-│       └── app-demo.yaml          # Application de démo
+│       └── actions-runner.yaml    # RunnerDeployment
 ├── manifests/
-│   ├── argocd/
-│   │   ├── 01-repo-helm-hashicorp.yaml
-│   │   ├── 02-repo-helm-actions-runner.yaml
-│   │   └── 03-repo-helm-harbor.yaml
 │   ├── actions-runner/
-│   │   └── values.yaml            # Helm values runner
-│   ├── kyverno/
-│   │   └── verify-image-policy.yaml
-│   └── vault/
-│       └── values.yaml
-├── app/
-│   ├── Dockerfile                 # Application de démo
-│   └── src/
-│       └── index.html
+│   │   └── values.yaml            # ARC Helm values
+│   └── argocd/
+│       └── 03-repo-helm-arc.yaml  # Repo Helm ARC
 ├── docs/
-│   ├── architecture.md
-│   ├── supply-chain-security.md
-│   └── screenshots/
+│   ├── phase5-supply-chain.md     # Documentation Phase 5
+│   ├── decisions/
+│   │   ├── ADR-001-github-vs-gitlab.md
+│   │   ├── ADR-002-arc-helm-vs-argocd.md
+│   │   ├── ADR-003-base-image-selection.md
+│   │   └── ADR-004-trivy-teampcp.md
+│   └── screenshots/               # 15 screenshots documentés
 └── README.md
 ```
 
@@ -151,7 +159,7 @@ okd-sno-supply-chain/
 - Installation OKD 4.15 agent-based sur GEEKOM A6 (32GB DDR5)
 - ArgoCD Community Operator v0.17.0
 - App of Apps pattern (`root-app`)
-- Proxy tinyproxy (`10.128.0.2:8888`) pour accès internet
+- Proxy tinyproxy (`10.128.0.2:8888`) pour accès internet cluster
 
 ### ✅ Phase 2a — IAM : Keycloak OIDC SSO
 - Keycloak déployé via ArgoCD (Helm)
@@ -161,7 +169,6 @@ okd-sno-supply-chain/
 ### ✅ Phase 2b — Secrets : HashiCorp Vault
 - Vault v0.28.0 dev mode via ArgoCD
 - External Secrets Operator (ESO) intégré
-- Vault Agent Injector configuré
 
 ### ✅ Phase 3 — Observabilité
 - Loki + Grafana déployés via ArgoCD
@@ -173,50 +180,23 @@ okd-sno-supply-chain/
 - Cosign keyless verification configuré
 
 ### 🚀 Phase 5 — CI/CD Supply Chain (en cours)
-- GitHub Actions self-hosted runner dans OKD
-- Pipeline : build → Trivy → Cosign → Harbor → ArgoCD
-- Kyverno enforcement mode
+- GitHub Actions self-hosted runner dans OKD via ARC
+- Trivy gate : 3 images bloquées (nginx, caddy, httpd) → fix libexpat
+- Trivy pinné v0.69.3 (post-attaque TeamPCP du 19 mars 2026)
+- Pipeline : build → Trivy✅ → push Harbor✅ → Cosign (en cours)
 
 ---
 
-## ⚡ Quick Start
+## ⚠️ Incident Supply Chain : TeamPCP (19 mars 2026)
 
-### Prérequis
+> Le 19 mars 2026, le groupe TeamPCP a compromis l'écosystème Trivy d'Aqua Security,
+> publiant un binaire malveillant v0.69.4 capable d'exfiltrer les secrets CI/CD.
 
-```bash
-# Accès cluster
-export KUBECONFIG=~/work/okd-sno-install/auth/kubeconfig
+**Notre pipeline n'a pas été affecté** car :
+- Trivy v0.69.3 pinnée (immutable, pré-attaque)
+- Téléchargement direct depuis GitHub Releases (pas via `setup-trivy`)
 
-# Vérifier l'état ArgoCD
-oc get applications -n argocd
-
-# SSH SNO master
-ssh sno-master  # 192.168.241.10
-```
-
-### Déployer le Runner
-
-```bash
-# 1. Créer le secret GitHub Runner token
-oc create secret generic github-runner-secret \
-  --from-literal=github_token=<RUNNER_TOKEN> \
-  -n actions-runner-system
-
-# 2. Appliquer via ArgoCD
-oc apply -f argocd/applications/actions-runner.yaml
-
-# 3. Vérifier
-oc get pods -n actions-runner-system
-```
-
-### Déclencher le pipeline
-
-```bash
-git add .
-git commit -m "feat: trigger supply chain pipeline"
-git push origin main
-# → GitHub Actions déclenche automatiquement
-```
+Voir [ADR-004](docs/decisions/ADR-004-trivy-teampcp.md) pour l'analyse complète.
 
 ---
 
@@ -224,25 +204,27 @@ git push origin main
 
 | Contrôle | Outil | Status |
 |----------|-------|--------|
-| Scan CVE images | Trivy | ✅ Gate CRITICAL=0 |
-| Signature images | Cosign (keyless) | ✅ Sigstore |
-| Vérification signature | Kyverno ClusterPolicy | ✅ Audit → Enforce |
+| Scan CVE images (gate) | Trivy v0.69.3 | ✅ CRITICAL=0 requis |
+| Signature images | Cosign 2.4.1 (keyless) | 🔄 En cours |
+| Vérification signature | Kyverno ClusterPolicy | ✅ Audit mode |
 | Secrets management | HashiCorp Vault + ESO | ✅ |
 | OIDC SSO | Keycloak | ✅ |
 | Registry privée | Harbor | ✅ |
 | GitOps immutable | ArgoCD | ✅ |
-| Network policies | OKD NetworkPolicy | 🔄 |
+| Base image mirrorée | Harbor library/ | ✅ |
+| Runner isolé | Pod OKD (namespaced) | ✅ |
 
 ---
 
 ## 📋 Compliance Mapping
 
-Ce projet démontre des contrôles alignés sur :
-
-- **NIS2** — Article 21 : sécurité de la chaîne d'approvisionnement
-- **DORA** — RTS : intégrité des logiciels et gestion des vulnérabilités  
-- **SLSA Level 2** — Provenance build + signature artefacts
-- **OWASP Top 10 CI/CD** — CICD-SEC-8 : Ungoverned usage of 3rd party services
+| Framework | Article | Contrôle démontré |
+|-----------|---------|-------------------|
+| **NIS2** | Art. 21 | Sécurité chaîne d'approvisionnement |
+| **DORA** | RTS Art. 8 | Intégrité logicielle + gestion vulnérabilités |
+| **SLSA Level 2** | - | Provenance build + signature artefacts |
+| **OWASP CI/CD Top 10** | CICD-SEC-3 | Dependency chain abuse |
+| **OWASP CI/CD Top 10** | CICD-SEC-8 | Ungoverned 3rd party services |
 
 ---
 
@@ -251,17 +233,38 @@ Ce projet démontre des contrôles alignés sur :
 | Composant | IP | Description |
 |-----------|-----|-------------|
 | OKD SNO Master | `192.168.241.10` | Single Node OpenShift |
-| Harbor Registry | `192.168.241.20` | Registry + Trivy |
-| Tinyproxy | `10.128.0.2:8888` | Proxy internet cluster |
+| Harbor Registry | `192.168.241.20` | Registry + Trivy intégré |
+| Tinyproxy | `10.128.0.2:8888` | Proxy internet pour pods OKD |
 | Harbor FQDN | `harbor.okd.lab` | DNS interne |
+
+---
+
+## ⚡ Quick Start
+
+```bash
+# Accès cluster
+export KUBECONFIG=~/work/okd-sno-install/auth/kubeconfig
+
+# Vérifier état ArgoCD
+oc get applications -n openshift-operators
+
+# Vérifier runner
+oc get runners -n actions-runner-system
+
+# SSH SNO
+ssh sno-master
+```
 
 ---
 
 ## 📄 License
 
-MIT — Portfolio project by [Stéphane Seloi](https://github.com/Z3ROX-lab)
+MIT — Portfolio project by [Stéphane Seloi / Z3ROX-lab](https://github.com/Z3ROX-lab)
 
 ---
 
-> **Note** : Ce projet est un lab de démonstration portfolio illustrant les patterns  
+> **Note** : Ce projet est un lab de démonstration portfolio illustrant les patterns
 > de supply chain security en environnement Cloud Native / OpenShift.
+> Il démontre des cas réels rencontrés en production : CVE CRITICAL dans les images de base,
+> attaques supply chain sur les outils de sécurité eux-mêmes (TeamPCP/Trivy 2026),
+> et les décisions d'architecture qui en découlent.
